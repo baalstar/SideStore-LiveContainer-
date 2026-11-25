@@ -1,0 +1,4 @@
+module CSISign {
+    header "sideinstaller.h"
+    export *
+}

@@ -1,0 +1,13 @@
+#include "../Build.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(MAIN_BUNDLE_IDENTIFIER)
+
+// for ios14 and above swift runtime is included
+ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO
+
+#include? "../local.xcconfig"
+
+// isideload signing core, built by scripts/build.sh
+SWIFT_INCLUDE_PATHS = $(inherited) $(SRCROOT)/Dependencies/sisign/include
+LIBRARY_SEARCH_PATHS[sdk=iphoneos*] = $(inherited) $(SRCROOT)/Dependencies/sisign/dist
+OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -lsisign -framework Security -framework SystemConfiguration -framework CoreFoundation -liconv

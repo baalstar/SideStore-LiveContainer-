@@ -1,0 +1,28 @@
+diff --git a/Sources/Anisette/AnisetteDataManager.swift b/Sources/Anisette/AnisetteDataManager.swift
+index 8c64485..02d305c 100644
+--- a/Sources/Anisette/AnisetteDataManager.swift
++++ b/Sources/Anisette/AnisetteDataManager.swift
+@@ -433,7 +433,8 @@ public final class AnisetteDataManager: @unchecked Sendable {
+             }
+         }
+ 
+-        let clientInfo = headers?.clientInfo ?? Constants.Anisette.defaultClientInfo
++        let clientInfo = (headers?.clientInfo ?? Constants.Anisette.defaultClientInfo)
++            .replacingOccurrences(of: "<macOS;", with: "<Mac OS X;")
+         let client = try await getClient(for: resolvedMode, clientInfo: clientInfo)
+ 
+         do {
+diff --git a/Sources/Models/AnisetteData.swift b/Sources/Models/AnisetteData.swift
+index 298eed2..449a84b 100644
+--- a/Sources/Models/AnisetteData.swift
++++ b/Sources/Models/AnisetteData.swift
+@@ -56,7 +56,8 @@ public struct AnisetteData: Sendable, Codable, Equatable, Hashable {
+         self.routingInfo = routingInfo
+         self.deviceID = deviceID
+         self.serialNumber = serialNumber
+-        self.clientInfo = clientInfo
++        // GSA answers HTTP 503 to "macOS;" since 2026-11-20 (SideStore #1745).
++        self.clientInfo = clientInfo.replacingOccurrences(of: "<macOS;", with: "<Mac OS X;")
+         self.userAgent = userAgent
+         self.clientTime = clientTime
+         self.locale = locale
