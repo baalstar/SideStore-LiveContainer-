@@ -10,8 +10,8 @@ jobs:
           xcode-version: '26.6.0'
       - name: Use Rust toolchain compatible with Xcode 26
         run: |
-          rustup toolchain install 1.95.0 --profile minimal
-          rustup default 1.95.0
+          rustup toolchain install 1.92.0 --profile minimal
+          rustup default 1.92.0
       - run: brew install ldid xcbeautify
       - run: bash ./scripts/build.sh
       - uses: actions/upload-artifact@v4
