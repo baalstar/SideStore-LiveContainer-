@@ -10,6 +10,8 @@ jobs:
           xcode-version: '26.6.0'
       - run: brew install ldid xcbeautify
       - run: bash ./scripts/build.sh
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "off"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
