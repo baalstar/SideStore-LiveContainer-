@@ -9,7 +9,7 @@ jobs:
         with:
           xcode-version: '26.6.0'
       - run: brew install ldid xcbeautify
-      - run: ./scripts/build.sh
+      - run: bash ./scripts/build.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
