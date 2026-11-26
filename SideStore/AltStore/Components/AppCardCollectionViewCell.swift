@@ -18,6 +18,9 @@ class AppCardCollectionViewCell: UICollectionViewCell
     
     var prefersPagingScreenshots = true
     
+    /// App Store style row: no screenshots or caption.
+    var isCompact = false
+    
     private let screenshotsCollectionView: UICollectionView
     private let stackView: UIStackView
     
@@ -361,7 +364,12 @@ extension AppCardCollectionViewCell
 {
     func configure(for storeApp: StoreApp, showSourceIcon: Bool = true)
     {
-        self.screenshots = storeApp.preferredScreenshots()
+        self.screenshots = self.isCompact ? [] : storeApp.preferredScreenshots()
+        self.screenshotsCollectionView.isHidden = self.isCompact
+        if self.isCompact
+        {
+            self.stackView.layoutMargins.bottom = self.bannerView.layoutMargins.left
+        }
         
         // Explicitly set to false to ensure we're starting from a non-activity indicating state.
         // Otherwise, cell reuse can mess up some cached values.
@@ -375,15 +383,19 @@ extension AppCardCollectionViewCell
         self.bannerView.subtitleLabel.minimumScaleFactor = 0.8
         self.bannerView.subtitleLabel.text = storeApp.developerName
         
-        if let subtitle = storeApp.subtitle, !subtitle.isEmpty
+        let subtitle = storeApp.subtitle ?? ""
+        if self.isCompact
         {
-            self.captionLabel.text = subtitle
-            self.captionLabel.isHidden = false
+            self.bannerView.subtitleLabel.numberOfLines = 2
+            if !subtitle.isEmpty { self.bannerView.subtitleLabel.text = subtitle }
         }
         else
         {
-            self.captionLabel.isHidden = true
+            self.captionLabel.text = subtitle
         }
+        self.captionLabel.isHidden = self.isCompact || subtitle.isEmpty
+        // label -> contentView -> vibrancy view (the stack's arranged subview)
+        self.captionLabel.superview?.superview?.isHidden = self.isCompact
     }
 }
 

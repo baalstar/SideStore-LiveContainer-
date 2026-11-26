@@ -96,7 +96,7 @@ class BrowseViewController: UICollectionViewController
         self.dataSource.contentView = self.collectionView
         
         let collectionViewLayout = self.collectionViewLayout as! UICollectionViewFlowLayout
-        collectionViewLayout.minimumLineSpacing = 30
+        collectionViewLayout.minimumLineSpacing = 10
         
         #if !os(tvOS)
         self.registerForPreviewing(with: self, sourceView: self.collectionView)
@@ -254,7 +254,9 @@ private extension BrowseViewController
             cell.layoutMargins.right = self.view.layoutMargins.right
             
             let showSourceIcon = (self.source == nil) // Hide source icon if redundant
+            cell.isCompact = true
             cell.configure(for: app, showSourceIcon: showSourceIcon)
+            cell.bannerView.setRank(indexPath.item + 1)
             
             cell.bannerView.iconImageView.image = nil
             cell.bannerView.iconImageView.isIndicatingActivity = true

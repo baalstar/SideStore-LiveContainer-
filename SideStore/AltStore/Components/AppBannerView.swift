@@ -58,6 +58,22 @@ class AppBannerView: NibView
     
     var style: Style = .app
     
+    private lazy var rankLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .headline)
+        label.textAlignment = .center
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
+        self.stackView.insertArrangedSubview(label, at: 1) // after the icon
+        return label
+    }()
+    
+    func setRank(_ rank: Int)
+    {
+        self.rankLabel.text = String(rank)
+    }
+    
     private var originalTintColor: UIColor?
     
     @IBOutlet var titleLabel: UILabel!
