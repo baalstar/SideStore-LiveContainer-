@@ -11,6 +11,7 @@ import Foundation
 import SideSign
 #if os(iOS) && !targetEnvironment(simulator)
 import CSISign
+import CryptoKit
 #endif
 
 final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext, ALTApplication>, @unchecked Sendable {
@@ -317,11 +318,14 @@ enum IsideloadEngine {
     /// because isideload has no input for them.
     static func handles(_ context: InstallAppOperationContext) -> Bool {
         let steps = context.pipelineSteps.map { $0.step }
-        return steps.contains(.resignApp) && !steps.contains(.stageBackupApp)
+        // TEST BUILD: on unless explicitly set to false. Not verified on a device.
+        let standard = Set(OperationEntitlements.defaultAdditionalEntitlements.keys)
+        return (UserDefaults.standard.object(forKey: "useIsideloadEngine") as? Bool ?? true)  // TEST BUILD: on
+            && steps.contains(.resignApp) && !steps.contains(.stageBackupApp)
             && context.customBundleIdentifier == nil
             && context.customInfoPlistByBundleID.isEmpty
             && context.customEntitlementsByBundleID.isEmpty
-            && context.additionalEntitlements.isEmpty
+            && Set(context.additionalEntitlements.keys).isSubset(of: standard)
             && context.overrideProvisioningProfile == nil
             && context.appendTeamID
     }
@@ -352,6 +356,11 @@ enum IsideloadEngine {
     private static func signBlocking(appURL: URL, appleID: String, password: String, teamID: String,
                                      privateKey: Data, anisetteURL: String, storage: String) throws -> URL {
         _ = DiagnosticLog.startRustLog
+        // The plaintext key copy must not outlive this signing run.
+        // Same path as si_adopt_key: <sha256(appleID)>/key.
+        let account = SHA256.hash(data: Data(appleID.utf8)).map { String(format: "%02x", $0) }.joined()
+        let keyPath = "\(storage)/\(account)/key"
+        defer { try? FileManager.default.removeItem(atPath: keyPath) }
         DiagnosticLog.write("sign", "adopting certificate key, bytes=\(privateKey.count)")
         let adopted = privateKey.withUnsafeBytes {
             si_adopt_key(storage, appleID, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)

@@ -66,6 +66,10 @@ public final class AuthManager: @unchecked Sendable {
     ) async {
         self.session = nil
         self.team = nil
+        UserDefaults.standard.isDeviceRegistered = false
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            try? FileManager.default.removeItem(at: support.appendingPathComponent("isideload", isDirectory: true))
+        }
         if !keepCertificate {
             debugLog("[AuthManager] Clearing signing certificate in cert manager and keychain.")
             CertificateManager.shared.clearActiveCertificate()

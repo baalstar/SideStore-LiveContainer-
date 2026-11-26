@@ -23,6 +23,18 @@
 refresh, refresh самого LiveContainer, виджет, запуск приложения внутри LiveContainer.
 Проверяйте на запасном Apple ID.
 
+## GitHub и LiveContainer (не проверено на сборке)
+- Sources → добавить `https://github.com/owner/repo` (публичный репозиторий с .ipa в релизах).
+  Берётся самый новый обычный релиз с IPA, до 3 файлов. При первом добавлении и новом файле IPA скачивается целиком для чтения данных.
+- My Apps → «+» → «Отправить файл в LiveContainer», затем перезапустить LiveContainer и открыть список приложений.
+  Нужен режим выбора источника «спрашивать». Один файл за каждое открытие списка.
+
+## Обновление приложения (не проверено на сборке)
+My Apps → «+» → «Обновить приложение из ZIP» или «Обновить из GitHub Actions».
+Для GitHub нужен fine-grained token только на ваш репозиторий с правом Actions: Read.
+Берётся самый новый действующий артефакт с LiveContainer в названии (любой ветки, не из форка).
+Держите последнюю рабочую IPA и компьютерный установщик на случай неудачи.
+
 ## Диагностика
 - Сборка: `dist/diagnostics.zip` (в Actions — артефакт `diagnostics`). Начинать с `summary.txt`.
 - iPhone: файл `diagnostics.log` в Documents SideStore (и `diagnostics.log.old`).
@@ -41,3 +53,7 @@ LiveContainer и SideStore: AGPL-3.0.
 лицензия в `sisign/LICENSE.md`: только некоммерческое использование, распространение только в исходниках.
 Собранную IPA не раздавайте. Изменения: убран idevice-ffi, добавлен `src/adopt.rs`,
 правки `lib.rs`, `Cargo.toml`, заголовка и modulemap. У вложенных библиотек свои лицензии.
+
+## ТЕСТОВАЯ ВЕРСИЯ (не проверена на устройстве)
+isideload включён по умолчанию. Изменены: PipelineExecutor, AuthManager, SignInOperation,
+ResignAppOperation, sisign/vendor/isideload sideloader.rs (регистрация, ключ, запрет нового сертификата).

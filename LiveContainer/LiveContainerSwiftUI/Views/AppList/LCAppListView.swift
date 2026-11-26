@@ -408,6 +408,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 isViewAppeared = true
             }
         }
+        .task { await installFromSideStoreInbox() }
         .onChange(of: sharedModel.deepLink) { link in
             guard sharedModel.selectedTab == .apps, let link else { return }
             sharedModel.deepLink = nil
@@ -830,6 +831,21 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             errorInfo = error.localizedDescription
             errorShow = true
         }
+    }
+    
+    /// IPAs sent by the built-in SideStore. Each is attempted once.
+    func installFromSideStoreInbox() async {
+        if installprogressVisible || sharedModel.multiLCStatus == 2 { return }
+        let fm = FileManager.default
+        let inbox = LCPath.docPath.appendingPathComponent("SideStore/Documents/LCInbox")
+        let files = (try? fm.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)) ?? []
+        guard let file = files.first(where: { ["ipa", "tipa"].contains($0.pathExtension.lowercased()) }) else { return }
+        // Move it out first so a crash during install can't cause a retry loop.
+        let staged = fm.temporaryDirectory.appendingPathComponent(file.lastPathComponent)
+        try? fm.removeItem(at: staged)
+        do { try fm.moveItem(at: file, to: staged) } catch { return }
+        await installFromUrl(urlStr: staged.absoluteString)
+        try? fm.removeItem(at: staged)
     }
     
     func installFromUrl(urlStr: String) async {

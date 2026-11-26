@@ -9,6 +9,7 @@
 import Foundation
 import CoreData
 import SemanticVersion
+import SideSign
 
 final class FetchSourceOperation: BaseStandaloneOperation<StandaloneOperationContext, Source>, @unchecked Sendable {
     let sourceURL: URL
@@ -70,7 +71,13 @@ final class FetchSourceOperation: BaseStandaloneOperation<StandaloneOperationCon
         request.cachePolicy = .reloadIgnoringLocalCacheData     // don't use local caching
         request.timeoutInterval = AppConstants.Sources.fetchTimeout
 
-        let (data, response) = try await self.fetchSourceData(with: request)
+        let (data, response): (Data, URLResponse)
+        if let repo = GitHubSource.repository(from: self.sourceURL) {
+            data = try await GitHubSource.sourceJSON(for: repo)
+            response = HTTPURLResponse(url: self.sourceURL, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        } else {
+            (data, response) = try await self.fetchSourceData(with: request)
+        }
         
         let childContext = DatabaseManager.shared.persistentContainer.newBackgroundContext(parent: dbContext)
         childContext.mergePolicy = NSOverwriteMergePolicy
@@ -262,5 +269,119 @@ final class FetchSourceOperation: BaseStandaloneOperation<StandaloneOperationCon
                 }
             }
         }
+    }
+}
+
+/// Turns https://github.com/owner/repo into a source built from the newest
+/// release that has .ipa assets. SideStore needs the bundle ID, version and
+/// permissions, so each new asset is downloaded once and its facts are cached.
+enum GitHubSource {
+    struct Repository { let owner: String; let name: String }
+
+    private struct Release: Decodable {
+        let draft, prerelease: Bool
+        let published_at: String?
+        let body: String?
+        let assets: [Asset]
+    }
+    private struct Asset: Decodable {
+        let id, size: Int
+        let name, updated_at: String
+        let browser_download_url: URL
+    }
+
+    static func repository(from url: URL) -> Repository? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard ["github.com", "www.github.com"].contains(url.host?.lowercased() ?? ""), parts.count == 2 else { return nil }
+        return Repository(owner: parts[0], name: parts[1].replacingOccurrences(of: ".git", with: "", options: [.anchored, .backwards]))
+    }
+
+    private static func fail(_ text: String) -> Error {
+        NSError(domain: "SideStore.GitHubSource", code: 1, userInfo: [NSLocalizedDescriptionKey: text])
+    }
+
+    static func sourceJSON(for repo: Repository) async throws -> Data {
+        guard let api = URL(string: "https://api.github.com/repos/\(repo.owner)/\(repo.name)/releases?per_page=20") else {
+            throw fail("Неверный адрес репозитория.")
+        }
+        var request = URLRequest(url: api, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (body, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw fail(status == 403 || status == 429 ? "GitHub ограничил число запросов. Попробуйте позже."
+                       : "GitHub ответил \(status). Нужен публичный репозиторий.")
+        }
+        func ipas(_ release: Release) -> [Asset] {
+            release.assets.filter { $0.name.lowercased().hasSuffix(".ipa") }
+        }
+        let releases = try JSONDecoder().decode([Release].self, from: body)
+        guard let release = releases.first(where: { !$0.draft && !$0.prerelease && !ipas($0).isEmpty }) else {
+            throw fail("В последних релизах (кроме черновиков и pre-release) нет .ipa.")
+        }
+
+        var apps: [[String: Any]] = []
+        var seen = Set<String>()
+        var lastError: Error?
+        for asset in ipas(release).prefix(3) {
+            do {
+                let facts = try await inspect(asset)
+                guard let bundleID = facts["bundleID"] as? String, seen.insert(bundleID).inserted else { continue }
+                var version: [String: Any] = [
+                    "version": facts["version"] as? String ?? "1.0",
+                    "date": release.published_at ?? asset.updated_at,
+                    "localizedDescription": release.body ?? "",
+                    "downloadURL": asset.browser_download_url.absoluteString,
+                    "size": asset.size,
+                ]
+                if let build = facts["build"] as? String, !build.isEmpty { version["buildVersion"] = build }
+                apps.append([
+                    "name": facts["name"] as? String ?? repo.name,
+                    "bundleIdentifier": bundleID,
+                    "developerName": repo.owner,
+                    "localizedDescription": "Из GitHub: \(repo.owner)/\(repo.name), файл \(asset.name)",
+                    "iconURL": "https://github.com/\(repo.owner).png",
+                    "versions": [version],
+                    "appPermissions": ["entitlements": facts["entitlements"] ?? [String](),
+                                       "privacy": facts["privacy"] ?? [String: String]()],
+                ])
+            } catch {
+                DiagnosticLog.error("GitHub asset \(asset.name)", error)
+                lastError = error
+            }
+        }
+        guard !apps.isEmpty else { throw lastError ?? fail("Не удалось прочитать IPA.") }
+        return try JSONSerialization.data(withJSONObject: [
+            "name": repo.name, "subtitle": "GitHub: \(repo.owner)",
+            "iconURL": "https://github.com/\(repo.owner).png",
+            "websiteURL": "https://github.com/\(repo.owner)/\(repo.name)",
+            "apps": apps, "news": [Any](),
+        ])
+    }
+
+    private static func inspect(_ asset: Asset) async throws -> [String: Any] {
+        let key = "GitHubSource.\(asset.id).\(asset.updated_at)"
+        if let cached = UserDefaults.standard.dictionary(forKey: key) { return cached }
+        let (file, response) = try await URLSession.shared.download(from: asset.browser_download_url)
+        let files = FileManager.default
+        let folder = files.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? files.removeItem(at: file); try? files.removeItem(at: folder) }
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw fail("Не удалось скачать \(asset.name).") }
+        try files.createDirectory(at: folder, withIntermediateDirectories: true)
+        let appURL = try files.unzipAppBundle(at: file, toDirectory: folder)
+        guard let app = ALTApplication(fileURL: appURL) else { throw fail("\(asset.name): не приложение iOS.") }
+        let bundles = [app] + Array(app.appExtensions)
+        let entitlements = Set(bundles.flatMap { $0.entitlements.keys.map { "\($0)" } })
+        var privacy: [String: String] = [:]
+        for bundle in bundles {
+            for (name, value) in bundle.infoPlist where "\(name)".hasSuffix("UsageDescription") {
+                privacy["\(name)"] = value as? String ?? "-"
+            }
+        }
+        let facts: [String: Any] = ["bundleID": app.bundleIdentifier, "name": app.name,
+                                    "version": app.version, "build": app.buildVersion,
+                                    "entitlements": Array(entitlements), "privacy": privacy]
+        UserDefaults.standard.set(facts, forKey: key)
+        return facts
     }
 }

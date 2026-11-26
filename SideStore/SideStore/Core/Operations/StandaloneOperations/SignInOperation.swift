@@ -289,6 +289,8 @@ private extension SignInOperation {
             team.update(team: altTeam)
             
             if makeActive {
+                // Re-verified for the newly active team.
+                UserDefaults.standard.isDeviceRegistered = false
                 // Account
                 account.isActiveAccount = true
                 let otherAccountsFetchRequest = Account.fetchRequest() as NSFetchRequest<Account>

@@ -123,6 +123,10 @@ final class PipelineExecutor: @unchecked Sendable {
             case .fetchProvisioningProfiles:
                 loggerType = FetchProvisioningProfilesOperation.self
 #if os(iOS) && !targetEnvironment(simulator)
+                // Both engines need a registered device. No handler: errors stop
+                // the pipeline instead of offering Skip.
+                let team = try await AuthManager.shared.getAuthenticatedTeam()
+                try await DeviceRegistrationFlow().registerCurrentDevice(for: team)
                 // isideload registers the App ID and gets the profile while signing.
                 if IsideloadEngine.handles(context) {
                     return nil

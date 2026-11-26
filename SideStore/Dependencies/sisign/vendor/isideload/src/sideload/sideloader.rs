@@ -158,19 +158,19 @@ impl Sideloader {
             Ok::<(), Report>(())
         };
 
+        // Never request a new certificate here: the caller hands over its key.
         let certificate = async {
-            Ok::<_, Report>(
-                CertificateIdentity::retrieve(
-                    &self.machine_name,
-                    &self.apple_email,
-                    &mut cert_session,
-                    &team,
-                    self.storage.as_ref(),
-                    &self.max_certs_behavior,
-                )
-                .await
-                .context("Failed to retrieve certificate identity")?,
+            CertificateIdentity::retrieve_existing(
+                &self.apple_email,
+                &mut cert_session,
+                &team,
+                self.storage.as_ref(),
             )
+            .await
+            .context("Failed to retrieve certificate identity")?
+            .ok_or_else(|| {
+                report!("No portal certificate matched the key (or the lookup failed)")
+            })
         };
 
         // Extracting the archive is blocking work, so it runs off this task and
